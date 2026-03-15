@@ -477,16 +477,35 @@ async function saveFile() {
     toast('💾 保存しました: ' + d.path);
 
   } else {
-    // iPhone ブラウザ → 新しいタブでファイルを開く
-    // iOS が Quick Look プレビューを表示 → 共有ボタン →「ファイルに保存」でフォルダを選択可（同名なら上書き）
-    const a = document.createElement('a');
-    a.href   = `/api/save/${S.fileId}`;
-    a.target = '_blank';
-    a.rel    = 'noopener';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    toast('📤 開いたプレビューの共有ボタン →「ファイルに保存」で保存先フォルダを選んでください', 6000);
+    // iPhone / Mac(IP経由) → Web Share API でシェアシートを開く
+    // 「ファイルに保存」でフォルダを選択・同名ファイルは上書き
+    loading(true);
+    try {
+      const resp = await fetch(`/api/save/${S.fileId}`);
+      if (!resp.ok) throw new Error('サーバーエラー');
+      const blob = await resp.blob();
+      const filename = S.filename.endsWith('.xlsx')
+        ? S.filename : (S.filename.replace(/\.[^.]+$/, '') || 'file') + '.xlsx';
+      const file = new File([blob], filename, {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        loading(false);
+        await navigator.share({ files: [file] });
+      } else {
+        // フォールバック（Web Share API 非対応環境）
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click();
+        setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+        toast('📥 ダウンロードしました');
+      }
+    } catch(err) {
+      if (!String(err).includes('cancel') && !String(err).includes('AbortError')) {
+        toast('❌ ' + err.message);
+      }
+    } finally { loading(false); }
   }
 }
 </script>

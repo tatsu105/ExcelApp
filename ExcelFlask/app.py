@@ -6,6 +6,7 @@ from datetime import datetime, date
 from flask import Flask, request, jsonify, render_template, send_file
 import openpyxl
 from openpyxl.styles import PatternFill
+from openpyxl.utils.datetime import from_excel as _from_excel
 
 app = Flask(__name__)
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
@@ -50,6 +51,16 @@ def fmt(v):
     if isinstance(v, (datetime, date)):
         return v.strftime('%Y/%m/%d')
     return str(v)
+
+
+def _resolve_date(cell, v):
+    """data_only=True のキャッシュが Excel シリアル日付（数値）を返す場合に datetime へ変換"""
+    if isinstance(v, (int, float)) and cell.is_date:
+        try:
+            return _from_excel(v)
+        except Exception:
+            pass
+    return v
 
 
 def get_cell_bg(cell):
@@ -101,6 +112,7 @@ def build_state(wb, wb_data):
 
                 disp = dc.value
                 if disp is not None:
+                    disp = _resolve_date(cell, disp)
                     drow.append(fmt(disp))
                 elif isinstance(raw, str) and raw.startswith('='):
                     drow.append('')

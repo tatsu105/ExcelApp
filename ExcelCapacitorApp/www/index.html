@@ -513,50 +513,42 @@ async function addSheet() {
   } finally { loading(false); }
 }
 
-// ── 保存（シェアシートで場所を選択） ─────────────────
+// ── 保存（Web Share API → シェアシートで保存先フォルダを選択） ─────
 async function saveFile() {
   if (!S.fileId) return;
   loading(true);
   try {
-    // Flask からファイルを取得
     const resp = await fetch(BASE_URL + '/api/save/' + S.fileId);
     if (!resp.ok) throw new Error('サーバーエラー');
     const blob = await resp.blob();
-
-    const base64 = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload  = () => resolve(reader.result.split(',')[1]);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-
     const filename = S.filename.endsWith('.xlsx')
-      ? S.filename : S.filename.replace(/\.[^.]+$/, '')+'.xlsx';
-
-    // 一時ファイルとして Documents に書き込む
-    await Capacitor.Plugins.Filesystem.writeFile({
-      path: filename,
-      data: base64,
-      directory: 'DOCUMENTS',
-      recursive: true,
+      ? S.filename : (S.filename.replace(/\.[^.]+$/, '') || 'file') + '.xlsx';
+    const file = new File([blob], filename, {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     });
-
-    // Documents 内のファイル URI を取得
-    const uriResult = await Capacitor.Plugins.Filesystem.getUri({
-      path: filename,
-      directory: 'DOCUMENTS',
-    });
-
     loading(false);
-    toast('📤 シェアシートで「ファイルに保存」→ 保存先フォルダを選んでください（同名ファイルは上書き）', 4000);
-
-    // iOS シェアシートを開く → 「ファイルに保存」で保存先フォルダを選択・上書き保存
-    await Capacitor.Plugins.Share.share({
-      title: filename,
-      files: [uriResult.uri],
-    });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file] });
+    } else {
+      // Capacitor Filesystem + Share フォールバック
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload  = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      await Capacitor.Plugins.Filesystem.writeFile({
+        path: filename, data: base64, directory: 'DOCUMENTS', recursive: true,
+      });
+      const uriResult = await Capacitor.Plugins.Filesystem.getUri({
+        path: filename, directory: 'DOCUMENTS',
+      });
+      await Capacitor.Plugins.Share.share({ title: filename, files: [uriResult.uri] });
+    }
   } catch(err) {
-    if (!String(err).includes('cancel')) toast(networkError(err), 4000);
+    if (!String(err).includes('cancel') && !String(err).includes('AbortError')) {
+      toast(networkError(err), 4000);
+    }
   } finally { loading(false); }
 }
 </script>
