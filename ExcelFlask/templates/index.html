@@ -242,6 +242,9 @@ const S = {
 };
 let openedViaDialog = false;
 
+// iPhone / iPad かどうか（Mac かどうかの判定に使用）
+const IS_IOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+
 // ── ユーティリティ ─────────────────────────────────
 function colName(n) {
   let s='', i=n+1;
@@ -462,22 +465,28 @@ async function saveFile() {
   if(!S.fileId) return;
 
   if (openedViaDialog) {
-    // Mac ダイアログで開いたファイル → 直接上書き
-    const d = await api(`/api/save_local/${S.fileId}`, {});
-    if (d.error) { toast('❌ '+d.error); return; }
-    toast('💾 上書き保存しました');
+    // Mac: ダイアログで開いたファイル → 元のパスに直接上書き
+    loading(true);
+    try {
+      const d = await api(`/api/save_local/${S.fileId}`, {});
+      if (d.error) { toast('❌ '+d.error); return; }
+      toast('💾 上書き保存しました');
+    } finally { loading(false); }
 
-  } else if (IS_LOCAL) {
-    // Mac ブラウザアップロード → Mac ダイアログ
-    toast('📂 Macで保存先ダイアログを確認してください…', 5000);
-    const d = await api(`/api/save_dialog/${S.fileId}`, {});
-    if (d.cancelled) { toast('キャンセルしました'); return; }
-    if (d.error)     { toast('❌ '+d.error); return; }
-    openedViaDialog = true;
-    toast('💾 保存しました: ' + d.path);
+  } else if (!IS_IOS) {
+    // Mac ブラウザ → AppleScript で Finder 保存ダイアログを表示
+    toast('📂 Macで保存先を選択してください…', 5000);
+    loading(true);
+    try {
+      const d = await api(`/api/save_dialog/${S.fileId}`, {});
+      if (d.cancelled) { toast('キャンセルしました'); return; }
+      if (d.error)     { toast('❌ '+d.error); return; }
+      openedViaDialog = true;
+      toast('💾 保存しました: ' + d.path);
+    } finally { loading(false); }
 
   } else {
-    // iPhone / Mac(IP経由) → Web Share API でシェアシートを開く
+    // iPhone → Web Share API でシェアシートを開く
     // 「ファイルに保存」でフォルダを選択・同名ファイルは上書き
     loading(true);
     try {
@@ -493,7 +502,6 @@ async function saveFile() {
         loading(false);
         await navigator.share({ files: [file] });
       } else {
-        // フォールバック（Web Share API 非対応環境）
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url; a.download = filename;

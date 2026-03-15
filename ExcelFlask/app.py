@@ -1,4 +1,5 @@
 import os
+import re
 import uuid
 import copy
 import subprocess
@@ -7,6 +8,8 @@ from flask import Flask, request, jsonify, render_template, send_file
 import openpyxl
 from openpyxl.styles import PatternFill
 from openpyxl.utils.datetime import from_excel as _from_excel
+
+_DATE_NF_RE = re.compile(r'[yYdD]|(?<!\[)[mM](?!\])', re.ASCII)
 
 app = Flask(__name__)
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
@@ -53,13 +56,30 @@ def fmt(v):
     return str(v)
 
 
-def _resolve_date(cell, v):
-    """data_only=True のキャッシュが Excel シリアル日付（数値）を返す場合に datetime へ変換"""
-    if isinstance(v, (int, float)) and cell.is_date:
-        try:
-            return _from_excel(v)
-        except Exception:
-            pass
+def _resolve_date(cell, dc, v):
+    """data_only=True キャッシュが Excel シリアル日付（数値）を返す場合に datetime へ変換。
+    ① 非数式セル: data_only=False 側の datetime 値を直接返す
+    ② 数式セル  : is_date または書式トークンで判定し from_excel() で変換
+    """
+    if not isinstance(v, (int, float)):
+        return v
+    # ① 非数式セルなら data_only=False の値（openpyxl が正しく datetime を返す）を使う
+    raw = cell.value
+    if isinstance(raw, (datetime, date)):
+        return raw
+    # ② 数式セル / どちらかのセルが日付フォーマット
+    for c in (cell, dc):
+        if c.is_date:
+            try:
+                return _from_excel(v)
+            except Exception:
+                return v
+        nf = c.number_format or ''
+        if nf and nf != 'General' and _DATE_NF_RE.search(nf):
+            try:
+                return _from_excel(v)
+            except Exception:
+                return v
     return v
 
 
@@ -112,7 +132,7 @@ def build_state(wb, wb_data):
 
                 disp = dc.value
                 if disp is not None:
-                    disp = _resolve_date(cell, disp)
+                    disp = _resolve_date(cell, dc, disp)
                     drow.append(fmt(disp))
                 elif isinstance(raw, str) and raw.startswith('='):
                     drow.append('')
@@ -202,8 +222,6 @@ def open_dialog():
 @app.route('/api/save_local/<file_id>', methods=['POST'])
 def save_local(file_id):
     """元のパスに上書き保存（Macダイアログで開いたファイル用）"""
-    if not _is_local():
-        return jsonify({'error': 'local_only'}), 403
     if file_id not in workbooks:
         return jsonify({'error': 'Not found'}), 404
     entry = workbooks[file_id]
