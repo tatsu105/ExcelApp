@@ -1,0 +1,9 @@
+{
+  "appId": "com.excelapp.local",
+  "appName": "Excel Editor",
+  "webDir": "www",
+  "ios": {
+    "allowsLinkPreview": false,
+    "scrollEnabled": false
+  }
+}
