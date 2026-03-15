@@ -548,8 +548,9 @@ async function saveFile() {
     });
 
     loading(false);
+    toast('📤 シェアシートで「ファイルに保存」→ 保存先フォルダを選んでください（同名ファイルは上書き）', 4000);
 
-    // iOS シェアシートを開く → 保存先を自分で選択できる
+    // iOS シェアシートを開く → 「ファイルに保存」で保存先フォルダを選択・上書き保存
     await Capacitor.Plugins.Share.share({
       title: filename,
       files: [uriResult.uri],

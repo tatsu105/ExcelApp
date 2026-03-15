@@ -477,19 +477,16 @@ async function saveFile() {
     toast('💾 保存しました: ' + d.path);
 
   } else {
-    // iPhone ブラウザ → ファイルをダウンロード（iOS シェアシートで Files に保存可）
-    loading(true);
-    try {
-      const resp = await fetch(`/api/save/${S.fileId}`);
-      const blob = await resp.blob();
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      a.href = url; a.download = S.filename || 'file.xlsx';
-      document.body.appendChild(a); a.click();
-      setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
-      toast('📥 ダウンロードしました');
-    } catch(err) { toast('❌ '+err.message); }
-    finally { loading(false); }
+    // iPhone ブラウザ → 新しいタブでファイルを開く
+    // iOS が Quick Look プレビューを表示 → 共有ボタン →「ファイルに保存」でフォルダを選択可（同名なら上書き）
+    const a = document.createElement('a');
+    a.href   = `/api/save/${S.fileId}`;
+    a.target = '_blank';
+    a.rel    = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    toast('📤 開いたプレビューの共有ボタン →「ファイルに保存」で保存先フォルダを選んでください', 6000);
   }
 }
 </script>
