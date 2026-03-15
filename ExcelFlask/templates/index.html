@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Excel Editor</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --primary:#1565C0; --primary-dark:#0D47A1; --primary-light:#1E88E5;
+    --success:#2E7D32; --border:#BDBDBD; --text:#212121; --text-light:#757575;
+    --white:#fff; --header-bg:#E3EAF8; --row-odd:#F5F8FF; --sel-outline:#1E88E5;
+  }
+  html, body { height:100%; font-family:-apple-system,'Helvetica Neue',sans-serif; }
+  body { background:#F0F4FF; color:var(--text); overflow:hidden; }
+
+  /* ── ホーム ── */
+  #home {
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    height:100vh; padding:24px; gap:20px;
+    background:linear-gradient(160deg,var(--primary-dark) 0%,var(--primary-light) 100%);
+  }
+  #home h1 { font-size:2rem; color:#fff; font-weight:700; }
+  #home p  { color:rgba(255,255,255,.75); font-size:.9rem; margin-top:-12px; }
+  .home-btn {
+    width:100%; max-width:360px; background:rgba(255,255,255,.15);
+    border:none; border-radius:16px; padding:20px; color:#fff;
+    text-align:center; cursor:pointer; display:block;
+  }
+  .home-btn:active { background:rgba(255,255,255,.28); }
+  .hb-icon  { font-size:2.4rem; display:block; margin-bottom:6px; }
+  .hb-title { font-size:1.1rem; font-weight:700; display:block; }
+  .hb-sub   { font-size:.8rem; opacity:.75; display:block; margin-top:2px; }
+
+  /* ── エディタ ── */
+  #editor { display:none; flex-direction:column; height:100vh; }
+
+  /* ツールバー */
+  .toolbar {
+    display:flex; align-items:center; gap:8px;
+    background:var(--primary-dark); padding:8px 12px; height:52px; flex-shrink:0;
+  }
+  .tb-btn {
+    background:rgba(255,255,255,.15); border:none; border-radius:8px;
+    color:#fff; font-size:.82rem; font-weight:600;
+    padding:6px 12px; cursor:pointer; white-space:nowrap;
+  }
+  .tb-btn.save { background:var(--success); }
+  .tb-btn:active { opacity:.7; }
+  .tb-title {
+    flex:1; color:#fff; font-size:.82rem; font-weight:600;
+    text-align:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+
+  /* 数式バー */
+  .formula-bar {
+    display:flex; align-items:center; gap:6px;
+    background:#fff; border-bottom:1px solid var(--border);
+    padding:0 10px; height:42px; flex-shrink:0;
+  }
+  .cell-label {
+    min-width:52px; font-size:.78rem; color:var(--text-light);
+    font-weight:700; text-align:center;
+    background:var(--header-bg); border-radius:4px; padding:3px 6px;
+    flex-shrink:0;
+  }
+  .color-wrap { display:flex; align-items:center; gap:4px; flex-shrink:0; }
+  .color-swatch {
+    width:24px; height:24px; border-radius:4px; border:1.5px solid #aaa;
+    cursor:pointer; position:relative; overflow:hidden; flex-shrink:0;
+  }
+  .color-swatch input[type=color] {
+    position:absolute; inset:0; width:100%; height:100%;
+    opacity:0; cursor:pointer; border:none; padding:0;
+  }
+  .color-clear {
+    font-size:.7rem; color:var(--text-light); background:var(--header-bg);
+    border:none; border-radius:4px; padding:3px 6px; cursor:pointer; flex-shrink:0;
+  }
+  .color-clear:active { opacity:.7; }
+  .formula-input {
+    flex:1; border:none; outline:none; font-size:.9rem; color:var(--text);
+    background:transparent; height:100%; min-width:0;
+  }
+  .formula-ok {
+    background:var(--primary); color:#fff; border:none;
+    border-radius:6px; padding:5px 14px; font-size:.85rem;
+    font-weight:600; cursor:pointer; flex-shrink:0;
+  }
+  .formula-ok:active { opacity:.8; }
+
+  /* シートタブ */
+  .tab-bar {
+    display:flex; background:var(--primary); padding:4px 8px;
+    height:40px; flex-shrink:0; overflow-x:auto; gap:6px; scrollbar-width:none;
+  }
+  .tab-bar::-webkit-scrollbar { display:none; }
+  .tab {
+    background:rgba(255,255,255,.15); border:none; border-radius:8px;
+    color:rgba(255,255,255,.85); font-size:.78rem; padding:4px 14px;
+    cursor:pointer; white-space:nowrap; flex-shrink:0;
+  }
+  .tab.active { background:#fff; color:var(--primary); font-weight:700; }
+  .tab-add {
+    background:transparent; border:1px dashed rgba(255,255,255,.5);
+    border-radius:8px; color:#fff; font-size:1.1rem; font-weight:700;
+    padding:0 12px; cursor:pointer; flex-shrink:0;
+  }
+
+  /* アクションバー */
+  .action-bar {
+    display:flex; gap:8px; padding:6px 10px;
+    background:#fff; border-bottom:1px solid var(--border);
+    height:44px; flex-shrink:0; align-items:center;
+  }
+  .action-btn {
+    background:var(--primary); color:#fff; border:none;
+    border-radius:8px; font-size:.78rem; font-weight:600;
+    padding:6px 14px; cursor:pointer;
+  }
+  .action-btn:active { opacity:.75; }
+
+  /* スプレッドシート */
+  .sheet-wrap { flex:1; overflow:auto; -webkit-overflow-scrolling:touch; }
+  table { border-collapse:collapse; table-layout:fixed; font-size:.82rem; }
+  th, td { border:1px solid var(--border); }
+  thead th {
+    position:sticky; top:0; z-index:3;
+    background:var(--primary-dark); color:#fff;
+    font-size:.74rem; font-weight:700; text-align:center;
+    height:28px; padding:0 4px; user-select:none; min-width:100px;
+  }
+  thead th.corner { position:sticky; left:0; z-index:4; min-width:36px; width:36px; }
+  tbody td.row-num {
+    position:sticky; left:0; z-index:2;
+    background:var(--header-bg); color:var(--text-light);
+    font-size:.7rem; text-align:center; font-weight:600;
+    width:36px; min-width:36px; padding:0; user-select:none;
+  }
+  tbody tr:nth-child(odd)  td:not(.row-num) { background:#fff; }
+  tbody tr:nth-child(even) td:not(.row-num) { background:var(--row-odd); }
+  td.has-bg { background:var(--cell-bg) !important; }
+  td.sel { outline:2px solid var(--sel-outline); outline-offset:-2px; }
+  td:not(.row-num) {
+    height:34px; padding:0 6px; cursor:pointer;
+    overflow:hidden; white-space:nowrap; text-overflow:ellipsis;
+    width:100px; min-width:100px;
+  }
+
+  /* ローディング */
+  #loading {
+    display:none; position:fixed; inset:0;
+    background:rgba(255,255,255,.8); z-index:100;
+    align-items:center; justify-content:center; flex-direction:column; gap:12px;
+  }
+  #loading.show { display:flex; }
+  .spinner {
+    width:40px; height:40px; border:4px solid var(--border);
+    border-top-color:var(--primary); border-radius:50%;
+    animation:spin .8s linear infinite;
+  }
+  @keyframes spin { to{transform:rotate(360deg)} }
+
+  /* トースト */
+  #toast {
+    position:fixed; bottom:28px; left:50%; transform:translateX(-50%);
+    background:rgba(0,0,0,.72); color:#fff; border-radius:20px;
+    padding:8px 20px; font-size:.85rem; opacity:0; transition:opacity .25s;
+    pointer-events:none; z-index:200; white-space:nowrap;
+  }
+  #toast.show { opacity:1; }
+</style>
+</head>
+<body>
+
+<!-- ホーム -->
+<div id="home">
+  <span style="font-size:3rem">📊</span>
+  <h1>Excel Editor</h1>
+  <p>Excelファイルの読み書きができます</p>
+  <label class="home-btn" id="open-btn" for="file-input">
+    <span class="hb-icon">📂</span>
+    <span class="hb-title">ファイルを開く</span>
+    <span class="hb-sub">.xlsx / .xls に対応</span>
+  </label>
+  <input id="file-input" type="file" accept=".xlsx,.xls"
+         style="position:absolute;opacity:0;width:0;height:0;pointer-events:none">
+  <button class="home-btn" onclick="newFile()">
+    <span class="hb-icon">✨</span>
+    <span class="hb-title">新規作成</span>
+    <span class="hb-sub">空のスプレッドシートを作成</span>
+  </button>
+</div>
+
+<!-- エディタ -->
+<div id="editor">
+  <div class="toolbar">
+    <button class="tb-btn" onclick="goHome()">← 戻る</button>
+    <span class="tb-title" id="tb-title"></span>
+    <button class="tb-btn save" onclick="saveFile()">上書き保存</button>
+  </div>
+
+  <div class="formula-bar">
+    <span class="cell-label" id="cell-label">—</span>
+    <div class="color-wrap">
+      <div class="color-swatch" id="color-swatch">
+        <input type="color" id="color-picker" value="#ffffff"
+               oninput="onColorInput(this.value)"
+               onchange="commitColor(this.value)">
+      </div>
+      <button class="color-clear" onclick="clearColor()">✕</button>
+    </div>
+    <input class="formula-input" id="formula-input"
+           placeholder="値または数式 (例: =SUM(A1:A5))"
+           onkeydown="formulaKeydown(event)">
+    <button class="formula-ok" onclick="commitFormula()">✓</button>
+  </div>
+
+  <div class="tab-bar" id="tab-bar"></div>
+
+  <div class="action-bar">
+    <button class="action-btn" onclick="addRow()">＋ 行</button>
+    <button class="action-btn" onclick="addCol()">＋ 列</button>
+  </div>
+
+  <div class="sheet-wrap">
+    <table id="tbl"><thead></thead><tbody></tbody></table>
+  </div>
+</div>
+
+<div id="loading"><div class="spinner"></div><span>処理中...</span></div>
+<div id="toast"></div>
+
+<script>
+// ── 状態 ──────────────────────────────────────────
+const S = {
+  fileId:null, filename:'', sheets:[],
+  values:{}, formulas:{}, bg:{},
+  active:'', sel:null,
+};
+let openedViaDialog = false;
+
+// ── ユーティリティ ─────────────────────────────────
+function colName(n) {
+  let s='', i=n+1;
+  while(i>0){const r=(i-1)%26; s=String.fromCharCode(65+r)+s; i=Math.floor((i-1)/26);}
+  return s;
+}
+const $  = id => document.getElementById(id);
+const loading = on => $('loading').classList.toggle('show', on);
+function toast(msg, ms=2200) {
+  const el=$('toast'); el.textContent=msg; el.classList.add('show');
+  clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'), ms);
+}
+async function api(path, body) {
+  const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  return r.json();
+}
+
+// ── 画面切替 ──────────────────────────────────────
+function showEditor() { $('home').style.display='none'; $('editor').style.display='flex'; }
+function goHome() {
+  if(!confirm('ホームに戻りますか？'))return;
+  $('home').style.display='flex'; $('editor').style.display='none';
+  Object.assign(S,{fileId:null,filename:'',sheets:[],values:{},formulas:{},bg:{},active:'',sel:null});
+  openedViaDialog=false;
+}
+
+// ── 初期化 ────────────────────────────────────────
+function initState(d) {
+  S.fileId=d.file_id; S.filename=d.filename;
+  S.sheets=d.sheets; S.values=d.values; S.formulas=d.formulas; S.bg=d.bg||{};
+  S.active=d.sheets[0]; S.sel=null;
+  renderAll(); showEditor();
+}
+
+// ── ファイルを開く ────────────────────────────────
+const IS_LOCAL = location.hostname==='localhost' || location.hostname==='127.0.0.1';
+
+document.getElementById('open-btn').addEventListener('click', function(e) {
+  if (IS_LOCAL) {
+    e.preventDefault();
+    openFileViaDialog();
+  }
+});
+
+async function openFileViaDialog() {
+  try {
+    const r = await fetch('/api/open_dialog', {method:'POST'});
+    const d = await r.json();
+    if (d.cancelled) return;
+    if (d.error) { toast('❌ '+d.error); return; }
+    loading(true);
+    openedViaDialog = true;
+    initState(d);
+  } catch(err) { toast('❌ '+err.message); }
+  finally { loading(false); }
+}
+
+$('file-input').addEventListener('change', async e => {
+  const file=e.target.files[0]; if(!file)return;
+  openedViaDialog = false;
+  const form=new FormData(); form.append('file',file,file.name);
+  loading(true);
+  try {
+    const r=await fetch('/api/upload',{method:'POST',body:form});
+    const d=await r.json();
+    if(d.error){toast('❌ '+d.error);return;}
+    initState(d);
+  } catch(err){toast('❌ '+err.message);}
+  finally{loading(false); e.target.value='';}
+});
+
+async function newFile() {
+  openedViaDialog = false;
+  loading(true);
+  try{initState(await api('/api/new',{}));}
+  finally{loading(false);}
+}
+
+// ── 描画 ──────────────────────────────────────────
+function renderAll() {
+  $('tb-title').textContent=S.filename;
+  renderTabs(); renderSheet();
+}
+
+function renderTabs() {
+  const bar=$('tab-bar'); bar.innerHTML='';
+  S.sheets.forEach(name=>{
+    const b=document.createElement('button');
+    b.className='tab'+(name===S.active?' active':'');
+    b.textContent=name;
+    b.onclick=()=>{S.active=name;S.sel=null;renderAll();};
+    bar.appendChild(b);
+  });
+  const add=document.createElement('button');
+  add.className='tab-add'; add.textContent='＋'; add.onclick=addSheet;
+  bar.appendChild(add);
+}
+
+function renderSheet() {
+  const matrix = S.values[S.active]  || [];
+  const bgMat  = S.bg[S.active]      || [];
+  const rows   = matrix.length;
+  const cols   = rows ? Math.max(...matrix.map(r=>r.length)) : 0;
+  const thead  = document.querySelector('#tbl thead');
+  const tbody  = document.querySelector('#tbl tbody');
+
+  let h='<tr><th class="corner"></th>';
+  for(let c=0;c<cols;c++) h+=`<th>${colName(c)}</th>`;
+  thead.innerHTML=h+'</tr>';
+
+  let b='';
+  for(let r=0;r<rows;r++){
+    b+=`<tr><td class="row-num">${r+1}</td>`;
+    for(let c=0;c<cols;c++){
+      const val   = matrix[r]?.[c] ?? '';
+      const color = bgMat[r]?.[c]  ?? '';
+      const isSel = S.sel?.r===r && S.sel?.c===c;
+      const esc   = String(val).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      let cls='', style='';
+      if(color){ cls='has-bg'; style=` style="--cell-bg:${color}"`; }
+      if(isSel) cls+=(cls?' ':'')+'sel';
+      b+=`<td${cls?` class="${cls}"`:''}${style} data-r="${r}" data-c="${c}" onclick="selectCell(${r},${c})">${esc}</td>`;
+    }
+    b+='</tr>';
+  }
+  tbody.innerHTML=b;
+  updateFormulaBar();
+}
+
+// ── セル選択 ──────────────────────────────────────
+function selectCell(r, c) {
+  if(S.sel?.r===r && S.sel?.c===c){ $('formula-input').focus(); return; }
+  S.sel={r,c};
+  document.querySelectorAll('#tbl td.sel').forEach(el=>el.classList.remove('sel'));
+  document.querySelector(`#tbl td[data-r="${r}"][data-c="${c}"]`)?.classList.add('sel');
+  updateFormulaBar();
+}
+
+function updateFormulaBar() {
+  const s=S.sel;
+  $('cell-label').textContent = s ? `${colName(s.c)}${s.r+1}` : '—';
+  $('formula-input').value    = s ? (S.formulas[S.active]?.[s.r]?.[s.c] ?? '') : '';
+  const color = s ? (S.bg[S.active]?.[s.r]?.[s.c] ?? '') : '';
+  const swatch = $('color-swatch');
+  const picker = $('color-picker');
+  if(color){ swatch.style.backgroundColor=color; picker.value=color; }
+  else { swatch.style.backgroundColor='#ffffff'; picker.value='#ffffff'; }
+}
+
+// ── 数式コミット ──────────────────────────────────
+function formulaKeydown(e) {
+  if(e.key==='Enter'){e.preventDefault();commitFormula();}
+  if(e.key==='Escape')updateFormulaBar();
+}
+
+async function commitFormula() {
+  const s=S.sel; if(!s)return;
+  const value=$('formula-input').value;
+  loading(true);
+  try {
+    const d=await api('/api/cell',{file_id:S.fileId,sheet:S.active,row:s.r,col:s.c,value});
+    if(d.error){toast('❌ '+d.error);return;}
+    S.values=d.values; S.formulas=d.formulas; S.bg=d.bg||S.bg;
+    renderAll(); S.sel=s; updateFormulaBar();
+  } finally{loading(false);}
+}
+
+// ── カラー操作 ────────────────────────────────────
+function onColorInput(color) { $('color-swatch').style.backgroundColor=color; }
+
+async function commitColor(color) { if(S.sel) await applyColor(color); }
+async function clearColor()       { if(S.sel) await applyColor(''); }
+
+async function applyColor(color) {
+  const s=S.sel;
+  loading(true);
+  try {
+    const d=await api('/api/color',{file_id:S.fileId,sheet:S.active,row:s.r,col:s.c,color});
+    if(d.error){toast('❌ '+d.error);return;}
+    S.values=d.values; S.formulas=d.formulas; S.bg=d.bg;
+    renderAll(); S.sel=s; updateFormulaBar();
+  } finally{loading(false);}
+}
+
+// ── 行 / 列 / シート追加 ──────────────────────────
+async function addRow() {
+  loading(true);
+  try{
+    const d=await api('/api/add_row',{file_id:S.fileId,sheet:S.active});
+    if(d.error){toast('❌ '+d.error);return;}
+    S.values=d.values; S.formulas=d.formulas; S.bg=d.bg; renderAll(); toast('行を追加しました');
+  }finally{loading(false);}
+}
+
+async function addCol() {
+  loading(true);
+  try{
+    const d=await api('/api/add_col',{file_id:S.fileId,sheet:S.active});
+    if(d.error){toast('❌ '+d.error);return;}
+    S.values=d.values; S.formulas=d.formulas; S.bg=d.bg; renderAll(); toast('列を追加しました');
+  }finally{loading(false);}
+}
+
+async function addSheet() {
+  const name=prompt('新しいシート名:',`Sheet${S.sheets.length+1}`);
+  if(!name)return;
+  loading(true);
+  try{
+    const d=await api('/api/add_sheet',{file_id:S.fileId,name});
+    if(d.error){toast('❌ '+d.error);return;}
+    S.sheets=d.sheets; S.values=d.values; S.formulas=d.formulas; S.bg=d.bg;
+    S.active=name; renderAll();
+  }finally{loading(false);}
+}
+
+// ── 上書き保存 ────────────────────────────────────
+async function saveFile() {
+  if(!S.fileId) return;
+
+  if (openedViaDialog) {
+    // Mac ダイアログで開いたファイル → 直接上書き
+    const d = await api(`/api/save_local/${S.fileId}`, {});
+    if (d.error) { toast('❌ '+d.error); return; }
+    toast('💾 上書き保存しました');
+
+  } else if (IS_LOCAL) {
+    // Mac ブラウザアップロード → Mac ダイアログ
+    toast('📂 Macで保存先ダイアログを確認してください…', 5000);
+    const d = await api(`/api/save_dialog/${S.fileId}`, {});
+    if (d.cancelled) { toast('キャンセルしました'); return; }
+    if (d.error)     { toast('❌ '+d.error); return; }
+    openedViaDialog = true;
+    toast('💾 保存しました: ' + d.path);
+
+  } else {
+    // iPhone ブラウザ → ファイルをダウンロード（iOS シェアシートで Files に保存可）
+    loading(true);
+    try {
+      const resp = await fetch(`/api/save/${S.fileId}`);
+      const blob = await resp.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url; a.download = S.filename || 'file.xlsx';
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+      toast('📥 ダウンロードしました');
+    } catch(err) { toast('❌ '+err.message); }
+    finally { loading(false); }
+  }
+}
+</script>
+</body>
+</html>
