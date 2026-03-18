@@ -14,7 +14,9 @@ from openpyxl.utils.datetime import from_excel as _from_excel
 _DATE_NF_RE = re.compile(r'[yYdD]|(?<!\[)[mM](?!\])', re.ASCII)
 
 app = Flask(__name__)
-UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
+# Render 本番は /tmp 配下のみ書き込み可。ローカルはアプリ内 uploads/
+UPLOAD_FOLDER = '/tmp/uploads' if os.environ.get('RENDER') else \
+    os.path.join(os.path.dirname(__file__), 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 workbooks = {}
