@@ -1,7 +1,9 @@
 import os
 import re
+import sys
 import uuid
 import copy
+import platform
 import subprocess
 from datetime import datetime, date
 from flask import Flask, request, jsonify, render_template, send_file
@@ -58,8 +60,7 @@ def fmt(v):
 
 def _resolve_date(cell, dc, v):
     """シリアル日付数値を datetime へ変換。変換できない場合は Render ログに出力。"""
-    import sys
-    if not isinstance(v, (int, float)):
+    if not isinstance(v, (int, float)) or v <= 0:
         return v
     # ① data_only=False 側が datetime を返していればそれを直接使う
     raw = cell.value
@@ -180,9 +181,11 @@ def state_response(entry):
 # ─────────────────────────────────────────────
 #  ルート
 # ─────────────────────────────────────────────
+_SERVER_IS_MAC = platform.system() == 'Darwin'
+
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('index.html', server_is_mac=_SERVER_IS_MAC)
 
 
 def _is_local():

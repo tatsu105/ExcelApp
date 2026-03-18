@@ -244,9 +244,8 @@ let openedViaDialog = false;
 
 // iPhone / iPad かどうか
 const IS_IOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
-// ローカル Mac（Flask をローカル起動している場合）かどうか
-const IS_LOCAL_MAC = !IS_IOS &&
-  (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
+// Flask サーバーが Mac 上で動いているか（Render=false, ローカルMac=true）
+const SERVER_IS_MAC = {{ server_is_mac | tojson }};
 
 // ── ユーティリティ ─────────────────────────────────
 function colName(n) {
@@ -476,8 +475,8 @@ async function saveFile() {
       toast('💾 上書き保存しました');
     } finally { loading(false); }
 
-  } else if (IS_LOCAL_MAC) {
-    // ローカル Mac（localhost）→ AppleScript で Finder 保存ダイアログを表示
+  } else if (!IS_IOS && SERVER_IS_MAC) {
+    // Mac 上の Flask（ローカル開発）→ AppleScript で Finder 保存ダイアログを表示
     toast('📂 Macで保存先を選択してください…', 5000);
     loading(true);
     try {
