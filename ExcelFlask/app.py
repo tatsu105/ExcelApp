@@ -82,12 +82,13 @@ def _resolve_date(cell, dc, v):
                 return _from_excel(v)
             except Exception:
                 return v
-    # ④ 変換できなかった場合: 診断ログ出力（Render の Logs で確認可）
-    if isinstance(v, (int, float)) and isinstance(raw, (int, float)):
-        print(f'[date_debug] v={v!r} raw={raw!r} '
-              f'cell.nf={cell.number_format!r} dc.nf={dc.number_format!r} '
-              f'cell.is_date={cell.is_date} dc.is_date={dc.is_date}',
-              file=sys.stderr, flush=True)
+    # ④ 最終手段: 書式 General でも整数かつ現代日付シリアル範囲(2009〜2064年)なら変換
+    #    46000台 = 2026年前後。1800/2100 など小さい値はスキップされる
+    if isinstance(v, int) and 40000 <= v <= 60000:
+        try:
+            return _from_excel(v)
+        except Exception:
+            pass
     return v
 
 
