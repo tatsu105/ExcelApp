@@ -57,29 +57,35 @@ def fmt(v):
 
 
 def _resolve_date(cell, dc, v):
-    """data_only=True キャッシュが Excel シリアル日付（数値）を返す場合に datetime へ変換。
-    ① 非数式セル: data_only=False 側の datetime 値を直接返す
-    ② 数式セル  : is_date または書式トークンで判定し from_excel() で変換
-    """
+    """シリアル日付数値を datetime へ変換。変換できない場合は Render ログに出力。"""
+    import sys
     if not isinstance(v, (int, float)):
         return v
-    # ① 非数式セルなら data_only=False の値（openpyxl が正しく datetime を返す）を使う
+    # ① data_only=False 側が datetime を返していればそれを直接使う
     raw = cell.value
     if isinstance(raw, (datetime, date)):
         return raw
-    # ② 数式セル / どちらかのセルが日付フォーマット
+    # ② is_date (openpyxl 判定)
     for c in (cell, dc):
         if c.is_date:
             try:
                 return _from_excel(v)
             except Exception:
                 return v
+    # ③ 書式文字列に日付トークン (y/d/m)
+    for c in (cell, dc):
         nf = c.number_format or ''
-        if nf and nf != 'General' and _DATE_NF_RE.search(nf):
+        if nf and nf not in ('General', '@', '') and _DATE_NF_RE.search(nf):
             try:
                 return _from_excel(v)
             except Exception:
                 return v
+    # ④ 変換できなかった場合: 診断ログ出力（Render の Logs で確認可）
+    if isinstance(v, (int, float)) and isinstance(raw, (int, float)):
+        print(f'[date_debug] v={v!r} raw={raw!r} '
+              f'cell.nf={cell.number_format!r} dc.nf={dc.number_format!r} '
+              f'cell.is_date={cell.is_date} dc.is_date={dc.is_date}',
+              file=sys.stderr, flush=True)
     return v
 
 
