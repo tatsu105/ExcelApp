@@ -3,7 +3,6 @@ import re
 import sys
 import uuid
 import copy
-import platform
 import subprocess
 from datetime import datetime, date
 from flask import Flask, request, jsonify, render_template, send_file
@@ -183,11 +182,9 @@ def state_response(entry):
 # ─────────────────────────────────────────────
 #  ルート
 # ─────────────────────────────────────────────
-_SERVER_IS_MAC = platform.system() == 'Darwin'
-
 @app.route('/')
 def index():
-    return render_template('index.html', server_is_mac=_SERVER_IS_MAC)
+    return render_template('index.html')
 
 
 def _is_local():
@@ -195,8 +192,11 @@ def _is_local():
 
 
 def _osascript(script):
-    r = subprocess.run(['osascript', '-e', script], capture_output=True, text=True)
-    return r.returncode, r.stdout.strip()
+    try:
+        r = subprocess.run(['osascript', '-e', script], capture_output=True, text=True)
+        return r.returncode, r.stdout.strip()
+    except FileNotFoundError:
+        return -1, ''  # osascript が存在しない（Linux / Render）
 
 
 @app.route('/api/open_dialog', methods=['POST'])
@@ -254,6 +254,8 @@ def save_dialog(file_id):
         f' default name "{fname}")\n'
         f'return POSIX path of f'
     )
+    if code == -1:
+        return jsonify({'error': 'not_mac'})   # osascript 非対応環境
     if code != 0 or not path:
         return jsonify({'cancelled': True})
 

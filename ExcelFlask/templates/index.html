@@ -244,8 +244,6 @@ let openedViaDialog = false;
 
 // iPhone / iPad かどうか
 const IS_IOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
-// Flask サーバーが Mac 上で動いているか（Render=false, ローカルMac=true）
-const SERVER_IS_MAC = {{ server_is_mac | tojson }};
 
 // ── ユーティリティ ─────────────────────────────────
 function colName(n) {
@@ -475,12 +473,19 @@ async function saveFile() {
       toast('💾 上書き保存しました');
     } finally { loading(false); }
 
-  } else if (!IS_IOS && SERVER_IS_MAC) {
-    // Mac 上の Flask（ローカル開発）→ AppleScript で Finder 保存ダイアログを表示
+  } else if (!IS_IOS) {
+    // Mac ブラウザ → AppleScript Finder ダイアログ試行
+    // Render(Linux)では not_mac エラーが返るので Web Share API にフォールバック
     toast('📂 Macで保存先を選択してください…', 5000);
     loading(true);
     try {
       const d = await api(`/api/save_dialog/${S.fileId}`, {});
+      if (d.error === 'not_mac') {
+        // Render 環境 → Web Share API へフォールバック
+        loading(false);
+        await _shareFile();
+        return;
+      }
       if (d.cancelled) { toast('キャンセルしました'); return; }
       if (d.error)     { toast('❌ '+d.error); return; }
       openedViaDialog = true;
@@ -489,35 +494,39 @@ async function saveFile() {
     finally { loading(false); }
 
   } else {
-    // Render 本番 Mac / iPhone → Web Share API でシェアシートを開く
-    // 「ファイルに保存」でフォルダを選択・同名ファイルは上書き
-    loading(true);
-    try {
-      const resp = await fetch(`/api/save/${S.fileId}`);
-      if (!resp.ok) throw new Error('サーバーエラー');
-      const blob = await resp.blob();
-      const filename = S.filename.endsWith('.xlsx')
-        ? S.filename : (S.filename.replace(/\.[^.]+$/, '') || 'file') + '.xlsx';
-      const file = new File([blob], filename, {
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      });
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        loading(false);
-        await navigator.share({ files: [file] });
-      } else {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url; a.download = filename;
-        document.body.appendChild(a); a.click();
-        setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
-        toast('📥 ダウンロードしました');
-      }
-    } catch(err) {
-      if (!String(err).includes('cancel') && !String(err).includes('AbortError')) {
-        toast('❌ ' + err.message);
-      }
-    } finally { loading(false); }
+    // iPhone → Web Share API
+    await _shareFile();
   }
+}
+
+// Web Share API 共通処理（iPhone & Render Mac 共用）
+async function _shareFile() {
+  loading(true);
+  try {
+    const resp = await fetch(`/api/save/${S.fileId}`);
+    if (!resp.ok) throw new Error('サーバーエラー');
+    const blob = await resp.blob();
+    const filename = S.filename.endsWith('.xlsx')
+      ? S.filename : (S.filename.replace(/\.[^.]+$/, '') || 'file') + '.xlsx';
+    const file = new File([blob], filename, {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      loading(false);
+      await navigator.share({ files: [file] });
+    } else {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+      toast('📥 ダウンロードしました');
+    }
+  } catch(err) {
+    if (!String(err).includes('cancel') && !String(err).includes('AbortError')) {
+      toast('❌ ' + err.message);
+    }
+  } finally { loading(false); }
 }
 </script>
 </body>
