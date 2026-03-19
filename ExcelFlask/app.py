@@ -337,7 +337,10 @@ def update_cell():
             except ValueError:
                 cell.value = value
 
-    entry['wb'].save(entry['filepath'])
+    try:
+        entry['wb'].save(entry['filepath'])
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
     ensure_size(entry, sheet, ri, ci)
 
     if isinstance(value, str) and value.startswith('='):
@@ -426,6 +429,10 @@ def save_file(file_id):
     if file_id not in workbooks:
         return jsonify({'error': 'Not found'}), 404
     entry = workbooks[file_id]
+    try:
+        entry['wb'].save(entry['filepath'])
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
     fname = entry['filename']
     if not fname.endswith('.xlsx'):
         fname += '.xlsx'
