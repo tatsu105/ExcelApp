@@ -2,6 +2,10 @@
   "appId": "com.excelapp.local",
   "appName": "Excel Editor",
   "webDir": "www",
+  "server": {
+    "url": "https://excelapp-rde3.onrender.com",
+    "cleartext": false
+  },
   "ios": {
     "allowsLinkPreview": false,
     "scrollEnabled": false
