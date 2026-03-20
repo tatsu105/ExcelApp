@@ -6,6 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Excel Editor</title>
+<script src="https://cdn.jsdelivr.net/npm/hyperformula/dist/hyperformula.full.min.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -241,6 +242,7 @@ const S = {
   active:'', sel:null,
 };
 let openedViaDialog = false;
+let hf = null;
 
 // iPhone / iPad かどうか
 const IS_IOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
@@ -262,6 +264,71 @@ async function api(path, body) {
   return r.json();
 }
 
+// ── HyperFormula（数式自動計算）────────────────────
+function initHyperFormula() {
+  if (hf) { try { hf.destroy(); } catch(e) {} hf = null; }
+  if (typeof HyperFormula === 'undefined') return;
+  const sheetsData = {};
+  S.sheets.forEach(name => {
+    const fmls = S.formulas[name] || [];
+    sheetsData[name] = fmls.map(row =>
+      (row || []).map(v => (v === '' || v == null) ? null : v)
+    );
+  });
+  try {
+    hf = HyperFormula.buildFromSheets(sheetsData, { licenseKey: 'gpl-v3' });
+    applyHFValues();
+  } catch(e) {
+    console.warn('HyperFormula init error:', e);
+    hf = null;
+  }
+}
+
+// 数式セルの表示値を HyperFormula の計算結果で上書き
+function applyHFValues() {
+  if (!hf) return;
+  S.sheets.forEach(sheetName => {
+    const sheetId = hf.getSheetId(sheetName);
+    if (sheetId === undefined) return;
+    const fmls = S.formulas[sheetName] || [];
+    fmls.forEach((row, ri) => {
+      (row || []).forEach((cell, ci) => {
+        if (typeof cell === 'string' && cell.startsWith('=')) {
+          let val = hf.getCellValue({ sheet: sheetId, row: ri, col: ci });
+          // エラーオブジェクトの場合は文字列化
+          if (val !== null && typeof val === 'object' && val.type) {
+            val = `#${val.type}!`;
+          }
+          if (val === null || val === undefined) val = '';
+          if (!S.values[sheetName]) S.values[sheetName] = [];
+          if (!S.values[sheetName][ri]) S.values[sheetName][ri] = [];
+          S.values[sheetName][ri][ci] = val;
+        }
+      });
+    });
+  });
+}
+
+// セル編集時に HyperFormula を更新して依存数式セルを再計算
+function updateHFCell(sheetName, ri, ci, rawValue) {
+  if (!hf) return;
+  const sheetId = hf.getSheetId(sheetName);
+  if (sheetId === undefined) return;
+  let val = rawValue;
+  if (val === '' || val == null) {
+    val = null;
+  } else if (typeof val === 'string' && !val.startsWith('=')) {
+    const n = Number(val);
+    if (!isNaN(n) && val.trim() !== '') val = n;
+  }
+  try {
+    hf.setCellContents({ sheet: sheetId, row: ri, col: ci }, [[val]]);
+    applyHFValues();
+  } catch(e) {
+    console.warn('HyperFormula update error:', e);
+  }
+}
+
 // ── 画面切替 ──────────────────────────────────────
 function showEditor() { $('home').style.display='none'; $('editor').style.display='flex'; }
 function goHome() {
@@ -269,6 +336,7 @@ function goHome() {
   $('home').style.display='flex'; $('editor').style.display='none';
   Object.assign(S,{fileId:null,filename:'',sheets:[],values:{},formulas:{},bg:{},active:'',sel:null});
   openedViaDialog=false;
+  if(hf){try{hf.destroy();}catch(e){} hf=null;}
 }
 
 // ── 初期化 ────────────────────────────────────────
@@ -276,6 +344,7 @@ function initState(d) {
   S.fileId=d.file_id; S.filename=d.filename;
   S.sheets=d.sheets; S.values=d.values; S.formulas=d.formulas; S.bg=d.bg||{};
   S.active=d.sheets[0]; S.sel=null;
+  initHyperFormula();
   renderAll(); showEditor();
 }
 
@@ -408,6 +477,7 @@ async function commitFormula() {
     const d=await api('/api/cell',{file_id:S.fileId,sheet:S.active,row:s.r,col:s.c,value});
     if(d.error){toast('❌ '+d.error);return;}
     S.values=d.values; S.formulas=d.formulas; S.bg=d.bg||S.bg;
+    updateHFCell(S.active, s.r, s.c, value);
     renderAll(); S.sel=s; updateFormulaBar();
   } finally{loading(false);}
 }
@@ -435,7 +505,7 @@ async function addRow() {
   try{
     const d=await api('/api/add_row',{file_id:S.fileId,sheet:S.active});
     if(d.error){toast('❌ '+d.error);return;}
-    S.values=d.values; S.formulas=d.formulas; S.bg=d.bg; renderAll(); toast('行を追加しました');
+    S.values=d.values; S.formulas=d.formulas; S.bg=d.bg; initHyperFormula(); renderAll(); toast('行を追加しました');
   }finally{loading(false);}
 }
 
@@ -444,7 +514,7 @@ async function addCol() {
   try{
     const d=await api('/api/add_col',{file_id:S.fileId,sheet:S.active});
     if(d.error){toast('❌ '+d.error);return;}
-    S.values=d.values; S.formulas=d.formulas; S.bg=d.bg; renderAll(); toast('列を追加しました');
+    S.values=d.values; S.formulas=d.formulas; S.bg=d.bg; initHyperFormula(); renderAll(); toast('列を追加しました');
   }finally{loading(false);}
 }
 
@@ -456,7 +526,7 @@ async function addSheet() {
     const d=await api('/api/add_sheet',{file_id:S.fileId,name});
     if(d.error){toast('❌ '+d.error);return;}
     S.sheets=d.sheets; S.values=d.values; S.formulas=d.formulas; S.bg=d.bg;
-    S.active=name; renderAll();
+    S.active=name; initHyperFormula(); renderAll();
   }finally{loading(false);}
 }
 
